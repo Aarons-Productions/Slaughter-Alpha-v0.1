@@ -2,33 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SLAUGHTER</title>
+    <title>SLAUGHTER v0.2.4</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
         #menu {
-            position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9);
+            position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.95);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            color: #ff0000; z-index: 100;
+            color: #ff0000; z-index: 100; text-align: center;
         }
         #start-btn {
-            padding: 20px 40px; background: #200; border: 2px solid #f00;
+            padding: 20px 40px; background: #100; border: 2px solid #f00;
             color: #f00; font-size: 2rem; cursor: pointer; margin-top: 20px;
+            box-shadow: 0 0 15px #f00;
         }
-        #start-btn:hover { background: #600; color: #fff; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #f00; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; display: none; }
-        #ui { position: absolute; top: 20px; left: 20px; color: #ff0000; z-index: 5; display: none; }
+        #start-btn:hover { background: #f00; color: #fff; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; border: 1px solid #f00; transform: translate(-50%, -50%); z-index: 10; display: none; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #ff0000; z-index: 5; display: none; font-weight: bold; }
+        #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 2; }
     </style>
 </head>
 <body>
 
+    <div id="flash"></div>
     <div id="menu">
-        <h1>SLAUGHTER</h1>
-        <p>ALPHA V0.2.3</p>
-        <button id="start-btn">START GAME</button>
+        <h1 style="font-size: 4rem; letter-spacing: 10px;">SLAUGHTER</h1>
+        <p>AARONS PRODUCTIONS | ALPHA V0.2.4</p>
+        <button id="start-btn">ENTER THE VOID</button>
     </div>
 
     <div id="crosshair"></div>
-    <div id="ui">KILLS: <span id="k">0</span></div>
+    <div id="ui">THREATS ELIMINATED: <span id="k">0</span></div>
 
     <audio id="menuMusic" src="MainMenu.mp3" loop></audio>
     <audio id="gameMusic" src="InGame.mp3" loop></audio>
@@ -41,20 +44,19 @@
         const startBtn = document.getElementById('start-btn');
         const menuMusic = document.getElementById('menuMusic');
         const gameMusic = document.getElementById('gameMusic');
+        const flash = document.getElementById('flash');
         const ui = document.getElementById('ui');
         const crosshair = document.getElementById('crosshair');
 
-        // Autoplay policy fix: Music starts on first click
+        // Start Menu Music
         window.addEventListener('mousedown', () => {
-            if (gameMusic.paused && menu.style.display !== 'none') {
-                menuMusic.play().catch(() => {});
-            }
+            if (menu.style.display !== 'none') menuMusic.play().catch(() => {});
         }, { once: true });
 
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.1);
+        scene.fog = new THREE.FogExp2(0x000000, 0.15);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
@@ -64,22 +66,21 @@
             menu.style.display = 'none';
             ui.style.display = 'block';
             crosshair.style.display = 'block';
-            
             menuMusic.pause();
             gameMusic.play();
             controls.lock();
         });
 
-        // --- GROUND & ENEMIES ---
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+        // --- WORLD ---
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ color: 0x080808 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
         const enemies = [];
         let kills = 0;
-        for(let i=0; i<8; i++) {
-            const e = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-            e.position.set(Math.random()*40-20, 1, Math.random()*-40);
+        for(let i=0; i<10; i++) {
+            const e = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 1.2), new THREE.MeshBasicMaterial({ color: 0x660000 }));
+            e.position.set(Math.random()*60-30, 1.25, Math.random()*-60);
             scene.add(e);
             enemies.push(e);
         }
@@ -88,13 +89,23 @@
         document.addEventListener('keydown', (e) => keys[e.code] = true);
         document.addEventListener('keyup', (e) => keys[e.code] = false);
 
+        // --- COMBAT LOGIC ---
+        let shakeIntensity = 0;
         window.addEventListener('mousedown', () => {
             if(!controls.isLocked) return;
+            
+            // Muzzle Flash & Shake
+            flash.style.opacity = "0.3";
+            setTimeout(() => flash.style.opacity = "0", 40);
+            shakeIntensity = 0.2;
+
             const ray = new THREE.Raycaster();
             ray.setFromCamera(new THREE.Vector2(0,0), camera);
             const hits = ray.intersectObjects(enemies);
+            
             if(hits.length > 0) {
-                hits[0].object.position.set(Math.random()*40-20, 1, Math.random()*-40 - 10);
+                const target = hits[0].object;
+                target.position.set(Math.random()*60-30, 1.25, Math.random()*-60);
                 kills++;
                 document.getElementById('k').innerText = kills;
             }
@@ -104,18 +115,30 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            
             if(controls.isLocked) {
-                if(keys['KeyW']) controls.moveForward(0.15);
-                if(keys['KeyS']) controls.moveForward(-0.15);
-                if(keys['KeyA']) controls.moveRight(-0.15);
-                if(keys['KeyD']) controls.moveRight(0.15);
+                if(keys['KeyW']) controls.moveForward(0.2);
+                if(keys['KeyS']) controls.moveForward(-0.2);
+                if(keys['KeyA']) controls.moveRight(-0.2);
+                if(keys['KeyD']) controls.moveRight(0.2);
+                
+                // Screen Shake Decay
+                if (shakeIntensity > 0) {
+                    camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+                    camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+                    shakeIntensity *= 0.9;
+                } else {
+                    camera.position.y = 1.6;
+                }
             }
+
             enemies.forEach(e => {
                 const dir = new THREE.Vector3().subVectors(camera.position, e.position).normalize();
-                e.position.x += dir.x * 0.03;
-                e.position.z += dir.z * 0.03;
+                e.position.x += dir.x * 0.05;
+                e.position.z += dir.z * 0.05;
                 e.lookAt(camera.position);
             });
+
             renderer.render(scene, camera);
         }
         animate();
