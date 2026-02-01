@@ -4,38 +4,52 @@
     <meta charset="UTF-8">
     <title>SLAUGHTER</title>
     <style>
-        body { margin: 0; background: #111; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; color: #f00; }
-        #game-container { width: 800px; height: 600px; position: relative; border: 4px solid #333; overflow: hidden; background: #000; box-shadow: 0 0 50px #000; }
-        #menu, #game-over { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
-        #game-over { display: none; color: #ff4444; }
-        .btn { padding: 15px 30px; background: #200; border: 2px solid #f00; color: #f00; font-size: 1.5rem; cursor: pointer; margin-top: 20px; }
-        .btn:hover { background: #f00; color: #fff; }
-        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border: 1px solid #f00; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; }
-        #flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 5; }
+        body { margin: 0; background: #0a0a0a; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; color: #f00; }
+        #game-container { width: 800px; height: 600px; position: relative; border: 4px solid #222; overflow: hidden; background: #000; }
+        
+        /* UI LAYERS */
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; background: rgba(0,0,0,0.9); }
+        #loading-screen { z-index: 200; background: #000; }
+        #pause-ui { display: none; background: rgba(0,0,0,0.7); border: 2px solid #f00; margin: 100px; height: 400px; }
+        #game-over { display: none; background: #300; }
+
+        .btn { padding: 15px 30px; background: #100; border: 2px solid #f00; color: #f00; font-size: 1.2rem; cursor: pointer; margin-top: 20px; text-transform: uppercase; }
+        .btn:hover { background: #f00; color: #fff; box-shadow: 0 0 20px #f00; }
+        
+        #hud { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; font-size: 0.9rem; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 1px solid #f00; transform: translate(-50%, -50%); z-index: 10; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        <div id="flash"></div>
-        
-        <div id="menu">
-            <h1 style="font-size: 3.5rem;">SLAUGHTER</h1>
-            <p>AARONS PRODUCTIONS | ALPHA V0.2.5</p>
-            <button class="btn" onclick="startGame()">INITIATE</button>
+        <div id="loading-screen" class="overlay">
+            <h1 style="letter-spacing: 15px;">LOADING</h1>
+            <p>AARONS PRODUCTIONS | v0.2.6</p>
         </div>
 
-        <div id="game-over">
-            <h1 style="font-size: 3.5rem;">SLAUGHTERED</h1>
-            <p id="final-stats"></p>
-            <button class="btn" onclick="location.reload()">REDEPLOY</button>
+        <div id="menu" class="overlay">
+            <h1 style="font-size: 4rem; margin: 0;">SLAUGHTER</h1>
+            <p style="color: #666;">ALPHA V0.2.6</p>
+            <button class="btn" onclick="startGame()">Start Session</button>
         </div>
 
-        <div id="ui">
-            <div>OBJECTIVE: SURVIVE</div>
-            <div>THREATS NEUTRALIZED: <span id="k">0</span></div>
-            <div id="stamina-ui">STAMINA: 100%</div>
+        <div id="pause-ui" class="overlay">
+            <h1>PAUSED</h1>
+            <p>TIME IS FROZEN</p>
+            <button class="btn" onclick="resumeGame()">Resume</button>
+        </div>
+
+        <div id="game-over" class="overlay">
+            <h1>NEUTRALIZED</h1>
+            <p id="stats"></p>
+            <button class="btn" onclick="location.reload()">Reset</button>
+        </div>
+
+        <div id="hud">
+            AARONS-PROD // SYSTEM_ACTIVE<br>
+            KILLS: <span id="k">0</span><br>
+            PULSE: <span id="pulse">72</span> BPM
         </div>
         <div id="crosshair"></div>
     </div>
@@ -47,106 +61,145 @@
         import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
         import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
 
+        let isPaused = true;
+        let isDead = false;
+        let kills = 0;
+        let headBobTimer = 0;
+
         const container = document.getElementById('game-container');
         const menuMusic = document.getElementById('menuMusic');
         const gameMusic = document.getElementById('gameMusic');
-        
+
+        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // Daylight Sky
+        scene.background = new THREE.Color(0x1a1a1a);
         const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(800, 600);
         container.appendChild(renderer.domElement);
 
         const controls = new PointerLockControls(camera, container);
-        window.startGame = () => {
-            document.getElementById('menu').style.display = 'none';
-            menuMusic.pause();
-            gameMusic.play();
-            controls.lock();
-        };
 
-        // --- LIGHTING ---
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(5, 10, 5);
-        scene.add(sun, new THREE.AmbientLight(0x404040));
-
-        // --- WORLD & GUN ---
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ color: 0x228b22 }));
+        // --- WORLD BUILDING ---
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshBasicMaterial({ color: 0x111111 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 1.2), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+        const wallMat = new THREE.MeshBasicMaterial({ color: 0x220000 });
+        const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 50), wallMat);
+        wallLeft.position.set(-25, 5, 0);
+        const wallRight = wallLeft.clone(); wallRight.position.set(25, 5, 0);
+        const wallBack = new THREE.Mesh(new THREE.BoxGeometry(50, 10, 1), wallMat);
+        wallBack.position.set(0, 5, -25);
+        scene.add(wallLeft, wallRight, wallBack);
+
+        // --- THE GUN ---
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1), new THREE.MeshBasicMaterial({ color: 0x050505 }));
         scene.add(gun);
 
         const enemies = [];
-        let kills = 0, isDead = false;
-        for(let i=0; i<6; i++) {
+        for(let i=0; i<8; i++) {
             const e = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-            e.position.set(Math.random()*40-20, 1, -20 - Math.random()*20);
+            e.position.set(Math.random()*40-20, 1, -20);
             scene.add(e);
             enemies.push(e);
         }
 
-        // --- MOVEMENT VARIABLES ---
+        // --- INPUTS ---
         const keys = {};
-        let velocity = new THREE.Vector3();
-        let canJump = true;
         document.addEventListener('keydown', (e) => keys[e.code] = true);
         document.addEventListener('keyup', (e) => keys[e.code] = false);
 
+        // --- CORE FUNCTIONS ---
+        window.startGame = () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('loading-screen').style.display = 'none';
+            menuMusic.pause();
+            gameMusic.play();
+            isPaused = false;
+            controls.lock();
+        };
+
+        window.resumeGame = () => {
+            document.getElementById('pause-ui').style.display = 'none';
+            isPaused = false;
+            controls.lock();
+        };
+
+        controls.addEventListener('unlock', () => {
+            if(!isDead) {
+                isPaused = true;
+                document.getElementById('pause-ui').style.display = 'flex';
+            }
+        });
+
+        // Shooting
         container.addEventListener('mousedown', () => {
-            if(!controls.isLocked || isDead) return;
-            document.getElementById('flash').style.opacity = "0.5";
-            setTimeout(() => document.getElementById('flash').style.opacity = "0", 50);
-            
+            if(isPaused || isDead) return;
             const ray = new THREE.Raycaster();
             ray.setFromCamera(new THREE.Vector2(0,0), camera);
             const hits = ray.intersectObjects(enemies);
             if(hits.length > 0) {
-                hits[0].object.position.set(Math.random()*40-20, 1, -30);
+                hits[0].object.position.set(Math.random()*40-20, 1, -20);
                 kills++;
                 document.getElementById('k').innerText = kills;
             }
         });
 
+        // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            if(controls.isLocked && !isDead) {
-                const moveSpeed = keys['ShiftLeft'] ? 0.3 : 0.15;
+            if (isPaused || isDead) return; // TIME PAUSE MECHANIC
+
+            const isSprinting = keys['ShiftLeft'];
+            const isMoving = keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD'];
+            const moveSpeed = isSprinting ? 0.25 : 0.12;
+
+            if(isMoving) {
                 if(keys['KeyW']) controls.moveForward(moveSpeed);
                 if(keys['KeyS']) controls.moveForward(-moveSpeed);
                 if(keys['KeyA']) controls.moveRight(-moveSpeed);
                 if(keys['KeyD']) controls.moveRight(moveSpeed);
 
-                // Gravity & Jumping
-                if(keys['Space'] && canJump) { velocity.y = 0.15; canJump = false; }
-                camera.position.y += velocity.y;
-                if(camera.position.y > 1.6) { velocity.y -= 0.01; } 
-                else { camera.position.y = 1.6; velocity.y = 0; canJump = true; }
-
-                // Gun Viewmodel Follow
-                gun.position.copy(camera.position);
-                gun.rotation.copy(camera.rotation);
-                gun.translateZ(-1); gun.translateX(0.5); gun.translateY(-0.4);
+                // Head Bob Logic
+                headBobTimer += isSprinting ? 0.25 : 0.15;
+                camera.position.y = 1.6 + Math.sin(headBobTimer) * (isSprinting ? 0.08 : 0.04);
+            } else {
+                // Idle Bob
+                headBobTimer += 0.03;
+                camera.position.y = 1.6 + Math.sin(headBobTimer) * 0.01;
             }
 
+            // Gun Follow with Bob
+            gun.position.copy(camera.position);
+            gun.rotation.copy(camera.rotation);
+            gun.translateZ(-0.8); gun.translateX(0.4); gun.translateY(-0.3);
+
+            // Enemy AI
             enemies.forEach(e => {
                 const dir = new THREE.Vector3().subVectors(camera.position, e.position).normalize();
-                e.position.x += dir.x * 0.06;
-                e.position.z += dir.z * 0.06;
-                e.lookAt(camera.position);
+                e.position.x += dir.x * 0.05;
+                e.position.z += dir.z * 0.05;
                 
-                if(e.position.distanceTo(camera.position) < 1.2 && !isDead) {
+                if(e.position.distanceTo(camera.position) < 1.2) {
                     isDead = true;
                     controls.unlock();
                     document.getElementById('game-over').style.display = 'flex';
-                    document.getElementById('final-stats').innerText = "THREATS NEUTRALIZED: " + kills;
+                    document.getElementById('stats').innerText = "FINAL SCORE: " + kills;
                     gameMusic.pause();
                 }
             });
+
             renderer.render(scene, camera);
         }
+
+        // Initialize Loading
+        setTimeout(() => {
+            document.getElementById('loading-screen').style.opacity = "0";
+            setTimeout(() => document.getElementById('loading-screen').style.display = "none", 500);
+            menuMusic.play().catch(() => {});
+        }, 2000);
+
         animate();
     </script>
 </body>
